@@ -71,8 +71,10 @@ AC_DEFUN([FLAGS_SETUP_LDFLAGS_HELPER],
       LIBJSIG_HASHSTYLE_LDFLAGS="-Wl,--hash-style=both"
     fi
 
-    # Add -z defs, to forbid undefined symbols in object files.
-    BASIC_LDFLAGS="$BASIC_LDFLAGS -Wl,-z,defs"
+    if test "x$OPENJDK_TARGET_OS" != xbsd; then
+        # Add -z defs, to forbid undefined symbols in object files.
+        BASIC_LDFLAGS="$BASIC_LDFLAGS -Wl,-z,defs"
+    fi
 
     BASIC_LDFLAGS_JVM_ONLY="-Wl,-z,noexecstack -Wl,-O1 -Wl,-z,relro"
 
@@ -110,6 +112,29 @@ AC_DEFUN([FLAGS_SETUP_LDFLAGS_HELPER],
       # FIXME: We should really generalize SET_SHARED_LIBRARY_ORIGIN instead.
       OS_LDFLAGS_JVM_ONLY="-Wl,-rpath,@loader_path/. -Wl,-rpath,@loader_path/.."
       OS_LDFLAGS_JDK_ONLY="-mmacosx-version-min=$MACOSX_VERSION_MIN"
+    fi
+    # On OpenBSD check to see if ld requires -z wxneeded
+    if test "x$OPENJDK_TARGET_OS_ENV" = xbsd.openbsd; then
+      AC_MSG_CHECKING([if ld requires -z wxneeded])
+      PUSHED_LDFLAGS="$LDFLAGS"
+      LDFLAGS="$LDFLAGS -Wl,-z,wxneeded"
+      AC_LINK_IFELSE([AC_LANG_SOURCE([[int main() { }]])],
+          [
+            if $READELF -l conftest$ac_exeext | $GREP WXNEED > /dev/null; then
+              AC_MSG_RESULT([yes])
+              OS_LDFLAGS_JDK_ONLY="-Wl,-z,wxneeded"
+            else
+              AC_MSG_RESULT([no])
+            fi
+          ],
+          [
+            AC_MSG_RESULT([no])
+          ],
+          [
+            AC_MSG_RESULT([no])
+          ]
+      )
+      LDFLAGS="$PUSHED_LDFLAGS"
     fi
   fi
 

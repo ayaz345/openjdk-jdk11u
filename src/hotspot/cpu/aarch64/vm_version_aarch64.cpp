@@ -34,8 +34,16 @@
 
 #include OS_HEADER_INLINE(os)
 
+#if defined (__linux__)
 #include <sys/auxv.h>
 #include <asm/hwcap.h>
+#elif defined (__FreeBSD__)
+#include <machine/elf.h>
+#endif
+
+#ifndef HWCAP_ASIMD
+#define HWCAP_ASIMD (1<<1)
+#endif
 
 #ifndef HWCAP_AES
 #define HWCAP_AES   (1<<3)
@@ -159,6 +167,7 @@ void VM_Version::get_processor_features() {
     SoftwarePrefetchHintDistance &= ~7;
   }
 
+#if defined(__linux__)
   unsigned long auxv = getauxval(AT_HWCAP);
 
   char buf[512];
@@ -169,7 +178,7 @@ void VM_Version::get_processor_features() {
   if (FILE *f = fopen("/proc/cpuinfo", "r")) {
     char buf[128], *p;
     while (fgets(buf, sizeof (buf), f) != NULL) {
-      if (p = strchr(buf, ':')) {
+      if ((p = strchr(buf, ':')) != NULL) {
         long v = strtol(p+1, NULL, 0);
         if (strncmp(buf, "CPU implementer", sizeof "CPU implementer" - 1) == 0) {
           _cpu = v;
@@ -186,6 +195,11 @@ void VM_Version::get_processor_features() {
     }
     fclose(f);
   }
+#elif defined(__FreeBSD__)
+  char buf[512];
+  int cpu_lines = 0;
+  unsigned long auxv = os_get_processor_features();
+#endif
 
   // Enable vendor specific features
 
