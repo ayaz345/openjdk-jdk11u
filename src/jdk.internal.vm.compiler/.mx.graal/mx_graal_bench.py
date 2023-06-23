@@ -49,15 +49,16 @@ def _run_benchmark(args, availableBenchmarks, runBenchmark):
     else:
         for bm in benchmarks:
             if bm not in availableBenchmarks:
-                mx.abort('unknown benchmark: ' + bm + '\nselect one of: ' + str(availableBenchmarks))
+                mx.abort(
+                    f'unknown benchmark: {bm}'
+                    + '\nselect one of: '
+                    + str(availableBenchmarks)
+                )
 
-    failed = []
-    for bm in benchmarks:
-        if not runBenchmark(bm, harnessArgs, vmOpts):
-            failed.append(bm)
-
-    if len(failed) != 0:
-        mx.abort('Benchmark failures: ' + str(failed))
+    if failed := [
+        bm for bm in benchmarks if not runBenchmark(bm, harnessArgs, vmOpts)
+    ]:
+        mx.abort(f'Benchmark failures: {failed}')
 
 def deoptalot(args):
     """bootstrap a VM with DeoptimizeALot and VerifyOops on
@@ -70,7 +71,18 @@ def deoptalot(args):
         del args[0]
 
     for _ in range(count):
-        if not mx_graal.run_vm(['-XX:-TieredCompilation', '-XX:+DeoptimizeALot', '-XX:+VerifyOops'] + args + ['-version']) == 0:
+        if (
+            mx_graal.run_vm(
+                [
+                    '-XX:-TieredCompilation',
+                    '-XX:+DeoptimizeALot',
+                    '-XX:+VerifyOops',
+                ]
+                + args
+                + ['-version']
+            )
+            != 0
+        ):
             mx.abort("Failed")
 
 def longtests(args):
@@ -130,7 +142,7 @@ def bench(args):
     vmArgs = [arg for arg in args if arg.startswith('-')]
 
     def benchmarks_in_group(group):
-        prefix = group + ':'
+        prefix = f'{group}:'
         return [a[len(prefix):] for a in args if a.startswith(prefix)]
 
     results = {}
@@ -142,7 +154,7 @@ def bench(args):
         dacapos = benchmarks_in_group('dacapo')
         for dacapo in dacapos:
             if dacapo not in sanitycheck.dacapoSanityWarmup.keys():
-                mx.abort('Unknown DaCapo : ' + dacapo)
+                mx.abort(f'Unknown DaCapo : {dacapo}')
             iterations = sanitycheck.dacapoSanityWarmup[dacapo][sanitycheck.SanityCheckLevel.Benchmark]
             if iterations > 0:
                 benchmarks += [sanitycheck.getDacapo(dacapo, ['-n', str(iterations)])]
@@ -153,7 +165,7 @@ def bench(args):
         scaladacapos = benchmarks_in_group('scaladacapo')
         for scaladacapo in scaladacapos:
             if scaladacapo not in sanitycheck.dacapoScalaSanityWarmup.keys():
-                mx.abort('Unknown Scala DaCapo : ' + scaladacapo)
+                mx.abort(f'Unknown Scala DaCapo : {scaladacapo}')
             iterations = sanitycheck.dacapoScalaSanityWarmup[scaladacapo][sanitycheck.SanityCheckLevel.Benchmark]
             if iterations > 0:
                 benchmarks += [sanitycheck.getScalaDacapo(scaladacapo, ['-n', str(iterations)])]

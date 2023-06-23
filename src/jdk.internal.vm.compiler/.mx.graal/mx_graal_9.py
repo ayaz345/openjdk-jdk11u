@@ -155,12 +155,10 @@ def microbench(args):
     if forking:
         jvm = get_vm()
         def quoteSpace(s):
-            if " " in s:
-                return '"' + s + '"'
-            return s
+            return f'"{s}"' if " " in s else s
 
         forkedVmArgs = map(quoteSpace, _parseVmArgs(_jdk, vmArgs))
-        args += ['--jvmArgsPrepend', ' '.join(['-' + jvm] + forkedVmArgs)]
+        args += ['--jvmArgsPrepend', ' '.join([f'-{jvm}'] + forkedVmArgs)]
     run_vm(args + jmhArgs)
 
 def ctw(args, extraVMarguments=None):
@@ -169,7 +167,13 @@ def ctw(args, extraVMarguments=None):
     defaultCtwopts = '-Inline'
 
     parser = ArgumentParser(prog='mx ctw')
-    parser.add_argument('--ctwopts', action='store', help='space separated JVMCI options used for CTW compilations (default: --ctwopts="' + defaultCtwopts + '")', default=defaultCtwopts, metavar='<options>')
+    parser.add_argument(
+        '--ctwopts',
+        action='store',
+        help=f'space separated JVMCI options used for CTW compilations (default: --ctwopts="{defaultCtwopts}")',
+        default=defaultCtwopts,
+        metavar='<options>',
+    )
     parser.add_argument('--cp', '--jar', action='store', help='jar or class path denoting classes to compile', metavar='<path>')
 
     args, vmargs = parser.parse_known_args(args)
@@ -188,11 +192,19 @@ def ctw(args, extraVMarguments=None):
     vmargs = ['-Djava.awt.headless=true'] + vmargs
 
     if _vm.jvmciMode == 'disabled':
-        vmargs += ['-XX:+CompileTheWorld', '-Xbootclasspath/p:' + cp]
+        vmargs += ['-XX:+CompileTheWorld', f'-Xbootclasspath/p:{cp}']
+    elif _vm.jvmciMode == 'jit':
+        vmargs += ['-XX:+BootstrapJVMCI']
+        vmargs += [
+            f'-G:CompileTheWorldClasspath={cp}',
+            'org.graalvm.compiler.hotspot.CompileTheWorld',
+        ]
+
     else:
-        if _vm.jvmciMode == 'jit':
-            vmargs += ['-XX:+BootstrapJVMCI']
-        vmargs += ['-G:CompileTheWorldClasspath=' + cp, 'org.graalvm.compiler.hotspot.CompileTheWorld']
+        vmargs += [
+            f'-G:CompileTheWorldClasspath={cp}',
+            'org.graalvm.compiler.hotspot.CompileTheWorld',
+        ]
 
     run_vm(vmargs + _noneAsEmptyList(extraVMarguments))
 
@@ -203,7 +215,7 @@ class UnitTestRun:
 
     def run(self, suites, tasks, extraVMarguments=None):
         for suite in suites:
-            with Task(self.name + ': hosted-release ' + suite, tasks) as t:
+            with Task(f'{self.name}: hosted-release {suite}', tasks) as t:
                 if t: unittest(['--suite', suite, '--enable-timing', '--verbose', '--fail-fast'] + self.args + _noneAsEmptyList(extraVMarguments))
 
 class BootstrapTest:
@@ -228,7 +240,7 @@ class MicrobenchRun:
         self.args = args
 
     def run(self, tasks, extraVMarguments=None):
-        with Task(self.name + ': hosted-product ', tasks) as t:
+        with Task(f'{self.name}: hosted-product ', tasks) as t:
             if t: microbench(_noneAsEmptyList(extraVMarguments) + ['--'] + self.args)
 
 def compiler_gate_runner(suites, unit_test_runs, bootstrap_tests, tasks, extraVMarguments=None):
@@ -255,9 +267,9 @@ def compiler_gate_runner(suites, unit_test_runs, bootstrap_tests, tasks, extraVM
     # run dacapo sanitychecks
     for test in sanitycheck.getDacapos(level=sanitycheck.SanityCheckLevel.Gate, gateBuildLevel='release', extraVmArguments=extraVMarguments) \
             + sanitycheck.getScalaDacapos(level=sanitycheck.SanityCheckLevel.Gate, gateBuildLevel='release', extraVmArguments=extraVMarguments):
-        with Task(str(test) + ':' + 'release', tasks) as t:
+        with Task(f'{str(test)}:release', tasks) as t:
             if t and not test.test('jvmci'):
-                t.abort(test.name + ' Failed')
+                t.abort(f'{test.name} Failed')
 
     # ensure -Xbatch still works
     with JVMCIMode('jit'):
@@ -283,14 +295,68 @@ _registers = 'o0,o1,o2,o3,f8,f9,d32,d34' if mx.get_arch() == 'sparcv9' else 'rbx
 
 graal_bootstrap_tests = [
     BootstrapTest('BootstrapWithSystemAssertions', ['-esa']),
-    BootstrapTest('BootstrapWithSystemAssertionsNoCoop', ['-esa', '-XX:-UseCompressedOops', '-G:+ExitVMOnException']),
-    BootstrapTest('BootstrapWithGCVerification', ['-XX:+UnlockDiagnosticVMOptions', '-XX:+VerifyBeforeGC', '-XX:+VerifyAfterGC', '-G:+ExitVMOnException'], suppress=['VerifyAfterGC:', 'VerifyBeforeGC:']),
-    BootstrapTest('BootstrapWithG1GCVerification', ['-XX:+UnlockDiagnosticVMOptions', '-XX:-UseSerialGC', '-XX:+UseG1GC', '-XX:+VerifyBeforeGC', '-XX:+VerifyAfterGC', '-G:+ExitVMOnException'], suppress=['VerifyAfterGC:', 'VerifyBeforeGC:']),
-    BootstrapTest('BootstrapEconomyWithSystemAssertions', ['-esa', '-Djvmci.compiler=graal-economy', '-G:+ExitVMOnException']),
-    BootstrapTest('BootstrapWithExceptionEdges', ['-esa', '-G:+StressInvokeWithExceptionNode', '-G:+ExitVMOnException']),
-    BootstrapTest('BootstrapWithRegisterPressure', ['-esa', '-G:RegisterPressure=' + _registers, '-G:+ExitVMOnException', '-G:+LIRUnlockBackendRestart']),
-    BootstrapTest('BootstrapTraceRAWithRegisterPressure', ['-esa', '-G:+TraceRA', '-G:RegisterPressure=' + _registers, '-G:+ExitVMOnException', '-G:+LIRUnlockBackendRestart']),
-    BootstrapTest('BootstrapWithImmutableCode', ['-esa', '-G:+ImmutableCode', '-G:+VerifyPhases', '-G:+ExitVMOnException']),
+    BootstrapTest(
+        'BootstrapWithSystemAssertionsNoCoop',
+        ['-esa', '-XX:-UseCompressedOops', '-G:+ExitVMOnException'],
+    ),
+    BootstrapTest(
+        'BootstrapWithGCVerification',
+        [
+            '-XX:+UnlockDiagnosticVMOptions',
+            '-XX:+VerifyBeforeGC',
+            '-XX:+VerifyAfterGC',
+            '-G:+ExitVMOnException',
+        ],
+        suppress=['VerifyAfterGC:', 'VerifyBeforeGC:'],
+    ),
+    BootstrapTest(
+        'BootstrapWithG1GCVerification',
+        [
+            '-XX:+UnlockDiagnosticVMOptions',
+            '-XX:-UseSerialGC',
+            '-XX:+UseG1GC',
+            '-XX:+VerifyBeforeGC',
+            '-XX:+VerifyAfterGC',
+            '-G:+ExitVMOnException',
+        ],
+        suppress=['VerifyAfterGC:', 'VerifyBeforeGC:'],
+    ),
+    BootstrapTest(
+        'BootstrapEconomyWithSystemAssertions',
+        ['-esa', '-Djvmci.compiler=graal-economy', '-G:+ExitVMOnException'],
+    ),
+    BootstrapTest(
+        'BootstrapWithExceptionEdges',
+        ['-esa', '-G:+StressInvokeWithExceptionNode', '-G:+ExitVMOnException'],
+    ),
+    BootstrapTest(
+        'BootstrapWithRegisterPressure',
+        [
+            '-esa',
+            f'-G:RegisterPressure={_registers}',
+            '-G:+ExitVMOnException',
+            '-G:+LIRUnlockBackendRestart',
+        ],
+    ),
+    BootstrapTest(
+        'BootstrapTraceRAWithRegisterPressure',
+        [
+            '-esa',
+            '-G:+TraceRA',
+            f'-G:RegisterPressure={_registers}',
+            '-G:+ExitVMOnException',
+            '-G:+LIRUnlockBackendRestart',
+        ],
+    ),
+    BootstrapTest(
+        'BootstrapWithImmutableCode',
+        [
+            '-esa',
+            '-G:+ImmutableCode',
+            '-G:+VerifyPhases',
+            '-G:+ExitVMOnException',
+        ],
+    ),
 ]
 
 def _graal_gate_runner(args, tasks):
@@ -314,17 +380,18 @@ def _parseVmArgs(jdk, args, addDefaultArgs=True):
     def translateGOption(arg):
         if arg.startswith('-G:+'):
             if '=' in arg:
-                mx.abort('Mixing + and = in -G: option specification: ' + arg)
+                mx.abort(f'Mixing + and = in -G: option specification: {arg}')
             arg = '-Dgraal.' + arg[len('-G:+'):] + '=true'
         elif arg.startswith('-G:-'):
             if '=' in arg:
-                mx.abort('Mixing - and = in -G: option specification: ' + arg)
+                mx.abort(f'Mixing - and = in -G: option specification: {arg}')
             arg = '-Dgraal.' + arg[len('-G:+'):] + '=false'
         elif arg.startswith('-G:'):
             if '=' not in arg:
-                mx.abort('Missing "=" in non-boolean -G: option specification: ' + arg)
+                mx.abort(f'Missing "=" in non-boolean -G: option specification: {arg}')
             arg = '-Dgraal.' + arg[len('-G:'):]
         return arg
+
     args = map(translateGOption, args)
 
     if '-G:+PrintFlags' in args and '-Xcomp' not in args:
@@ -336,7 +403,7 @@ def _parseVmArgs(jdk, args, addDefaultArgs=True):
             bcp.append(mx.library('JVMCI').classpath_repr())
         bcp.extend([d.get_classpath_repr() for d in _bootClasspathDists])
     if bcp:
-        args = ['-Xbootclasspath/p:' + os.pathsep.join(bcp)] + args
+        args = [f'-Xbootclasspath/p:{os.pathsep.join(bcp)}'] + args
 
     # Remove JVMCI from class path. It's only there to support compilation.
     cpIndex, cp = mx.find_classpath_arg(args)
@@ -347,7 +414,7 @@ def _parseVmArgs(jdk, args, addDefaultArgs=True):
 
     # Set the default JVMCI compiler
     jvmciCompiler = _compilers[-1]
-    args = ['-Djvmci.compiler=' + jvmciCompiler] + args
+    args = [f'-Djvmci.compiler={jvmciCompiler}'] + args
 
     if '-version' in args:
         ignoredArgs = args[args.index('-version') + 1:]
@@ -360,7 +427,7 @@ def run_java(jdk, args, nonZeroIsFatal=True, out=None, err=None, cwd=None, timeo
     args = _parseVmArgs(jdk, args, addDefaultArgs=addDefaultArgs)
 
     jvmciModeArgs = _jvmciModes[_vm.jvmciMode]
-    cmd = [jdk.java] + ['-' + get_vm()] + jvmciModeArgs + args
+    cmd = [jdk.java] + [f'-{get_vm()}'] + jvmciModeArgs + args
     return mx.run(cmd, nonZeroIsFatal=nonZeroIsFatal, out=out, err=err, cwd=cwd)
 
 _JVMCI_JDK_TAG = 'jvmci'
@@ -424,7 +491,13 @@ mx.update_commands(_suite, {
     'microbench' : [microbench, '[VM options] [-- [JMH options]]'],
 })
 
-mx.add_argument('-M', '--jvmci-mode', action='store', choices=sorted(_jvmciModes.viewkeys()), help='the JVM variant type to build/run (default: ' + _vm.jvmciMode + ')')
+mx.add_argument(
+    '-M',
+    '--jvmci-mode',
+    action='store',
+    choices=sorted(_jvmciModes.viewkeys()),
+    help=f'the JVM variant type to build/run (default: {_vm.jvmciMode})',
+)
 
 def mx_post_parse_cmd_line(opts):
     if opts.jvmci_mode is not None:

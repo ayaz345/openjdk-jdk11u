@@ -139,9 +139,7 @@ specjvm2008Names = [
 ]
 
 def _noneAsEmptyList(a):
-    if a is None:
-        return []
-    return a
+    return [] if a is None else a
 
 class SanityCheckLevel:
     Fast, Gate, Normal, Extensive, Benchmark = range(5)
@@ -158,7 +156,21 @@ def getSPECjbb2005(benchArgs=None):
     success = re.compile(r"^Valid run, Score is  [0-9]+$", re.MULTILINE)
     matcher = ValuesMatcher(score, {'group' : 'SPECjbb2005', 'name' : 'score', 'score' : '<score>'})
     classpath = ['jbb.jar', 'check.jar']
-    return Test("SPECjbb2005", ['spec.jbb.JBBmain', '-propfile', 'SPECjbb.props'] + benchArgs, [success], [error], [matcher], vmOpts=['-Xms3g', '-XX:+' + gc, '-XX:-UseCompressedOops', '-cp', os.pathsep.join(classpath)], defaultCwd=specjbb2005)
+    return Test(
+        "SPECjbb2005",
+        ['spec.jbb.JBBmain', '-propfile', 'SPECjbb.props'] + benchArgs,
+        [success],
+        [error],
+        [matcher],
+        vmOpts=[
+            '-Xms3g',
+            f'-XX:+{gc}',
+            '-XX:-UseCompressedOops',
+            '-cp',
+            os.pathsep.join(classpath),
+        ],
+        defaultCwd=specjbb2005,
+    )
 
 def getSPECjbb2013(benchArgs=None):
 
@@ -202,7 +214,15 @@ def getSPECjvm2008(benchArgs=None):
     success = re.compile(r"^(Noncompliant c|C)omposite result: [0-9]+((,|\.)[0-9]+)?( SPECjvm2008 (Base|Peak))? ops/m$", re.MULTILINE)
     matcher = ValuesMatcher(score, {'group' : 'SPECjvm2008', 'name' : '<benchmark>', 'score' : '<score>'})
 
-    return Test("SPECjvm2008", ['-jar', 'SPECjvm2008.jar'] + _noneAsEmptyList(benchArgs), [success], [error], [matcher], vmOpts=['-Xms3g', '-XX:+' + gc, '-XX:-UseCompressedOops'], defaultCwd=specjvm2008)
+    return Test(
+        "SPECjvm2008",
+        ['-jar', 'SPECjvm2008.jar'] + _noneAsEmptyList(benchArgs),
+        [success],
+        [error],
+        [matcher],
+        vmOpts=['-Xms3g', f'-XX:+{gc}', '-XX:-UseCompressedOops'],
+        defaultCwd=specjvm2008,
+    )
 
 def getDacapos(level=SanityCheckLevel.Normal, gateBuildLevel=None, dacapoArgs=None, extraVmArguments=None):
     checks = []
@@ -224,7 +244,9 @@ def getDacapo(name, dacapoArgs=None, extraVmArguments=None):
             mx.abort('DaCapo 9.12 jar file must be specified with DACAPO_CP environment variable or as DACAPO library')
 
     if not isfile(dacapo) or not dacapo.endswith('.jar'):
-        mx.abort('Specified DaCapo jar file does not exist or is not a jar file: ' + dacapo)
+        mx.abort(
+            f'Specified DaCapo jar file does not exist or is not a jar file: {dacapo}'
+        )
 
     dacapoSuccess = re.compile(r"^===== DaCapo 9\.12 ([a-zA-Z0-9_]+) PASSED in ([0-9]+) msec =====", re.MULTILINE)
     dacapoFail = re.compile(r"^===== DaCapo 9\.12 ([a-zA-Z0-9_]+) FAILED (warmup|) =====", re.MULTILINE)
@@ -235,10 +257,23 @@ def getDacapo(name, dacapoArgs=None, extraVmArguments=None):
     dacapoMatcher1 = ValuesMatcher(dacapoTime1, {'group' : 'DaCapo-1stRun', 'name' : '<benchmark>', 'score' : '<time>'})
 
     # Use ipv4 stack for dacapos; tomcat+solaris+ipv6_interface fails (see also: JDK-8072384)
-    return Test("DaCapo-" + name, ['-jar', mx._cygpathU2W(dacapo), name] + _noneAsEmptyList(dacapoArgs), [dacapoSuccess], [dacapoFail],
-                [dacapoMatcher, dacapoMatcher1],
-                ['-Xms2g', '-XX:+' + gc, '-XX:-UseCompressedOops', "-Djava.net.preferIPv4Stack=true", '-G:+ExitVMOnException'] +
-                _noneAsEmptyList(extraVmArguments))
+    return Test(
+        f"DaCapo-{name}",
+        ['-jar', mx._cygpathU2W(dacapo), name] + _noneAsEmptyList(dacapoArgs),
+        [dacapoSuccess],
+        [dacapoFail],
+        [dacapoMatcher, dacapoMatcher1],
+        (
+            [
+                '-Xms2g',
+                f'-XX:+{gc}',
+                '-XX:-UseCompressedOops',
+                "-Djava.net.preferIPv4Stack=true",
+                '-G:+ExitVMOnException',
+            ]
+            + _noneAsEmptyList(extraVmArguments)
+        ),
+    )
 
 def getScalaDacapos(level=SanityCheckLevel.Normal, gateBuildLevel=None, dacapoArgs=None, extraVmArguments=None):
     checks = []
@@ -260,7 +295,9 @@ def getScalaDacapo(name, dacapoArgs=None, extraVmArguments=None):
             mx.abort('Scala DaCapo 0.1.0 jar file must be specified with DACAPO_SCALA_CP environment variable or as DACAPO_SCALA library')
 
     if not isfile(dacapo) or not dacapo.endswith('.jar'):
-        mx.abort('Specified Scala DaCapo jar file does not exist or is not a jar file: ' + dacapo)
+        mx.abort(
+            f'Specified Scala DaCapo jar file does not exist or is not a jar file: {dacapo}'
+        )
 
     dacapoSuccess = re.compile(r"^===== DaCapo 0\.1\.0(-SNAPSHOT)? ([a-zA-Z0-9_]+) PASSED in ([0-9]+) msec =====", re.MULTILINE)
     dacapoFail = re.compile(r"^===== DaCapo 0\.1\.0(-SNAPSHOT)? ([a-zA-Z0-9_]+) FAILED (warmup|) =====", re.MULTILINE)
@@ -268,7 +305,15 @@ def getScalaDacapo(name, dacapoArgs=None, extraVmArguments=None):
 
     dacapoMatcher = ValuesMatcher(dacapoTime, {'group' : "Scala-DaCapo", 'name' : '<benchmark>', 'score' : '<time>'})
 
-    return Test("Scala-DaCapo-" + name, ['-jar', mx._cygpathU2W(dacapo), name] + _noneAsEmptyList(dacapoArgs), [dacapoSuccess], [dacapoFail], [dacapoMatcher], ['-Xms2g', '-XX:+' + gc, '-XX:-UseCompressedOops'] + _noneAsEmptyList(extraVmArguments))
+    return Test(
+        f"Scala-DaCapo-{name}",
+        ['-jar', mx._cygpathU2W(dacapo), name] + _noneAsEmptyList(dacapoArgs),
+        [dacapoSuccess],
+        [dacapoFail],
+        [dacapoMatcher],
+        ['-Xms2g', f'-XX:+{gc}', '-XX:-UseCompressedOops']
+        + _noneAsEmptyList(extraVmArguments),
+    )
 
 def getBootstraps():
     time = re.compile(r"Bootstrapping Graal\.+ in (?P<time>[0-9]+) ms( \(compiled (?P<methods>[0-9]+) methods\))?")
@@ -277,8 +322,16 @@ def getBootstraps():
     scoreMatcherBig = ValuesMatcher(time, {'group' : 'Bootstrap-bigHeap', 'name' : 'BootstrapTime', 'score' : '<time>'})
     methodMatcherBig = ValuesMatcher(time, {'group' : 'Bootstrap-bigHeap', 'name' : 'BootstrapMethods', 'score' : '<methods>'})
 
-    tests = []
-    tests.append(Test("Bootstrap", ['-version'], successREs=[time], scoreMatchers=[scoreMatcher, methodMatcher], ignoredVMs=['client', 'server'], benchmarkCompilationRate=False))
+    tests = [
+        Test(
+            "Bootstrap",
+            ['-version'],
+            successREs=[time],
+            scoreMatchers=[scoreMatcher, methodMatcher],
+            ignoredVMs=['client', 'server'],
+            benchmarkCompilationRate=False,
+        )
+    ]
     tests.append(Test("Bootstrap-bigHeap", ['-version'], successREs=[time], scoreMatchers=[scoreMatcherBig, methodMatcherBig], vmOpts=['-Xms2g'], ignoredVMs=['client', 'server'], benchmarkCompilationRate=False))
     return tests
 
@@ -295,7 +348,7 @@ def getCTW(vm, mode):
     rtjar = join(jre, 'lib', 'rt.jar')
 
 
-    args = ['-XX:+CompileTheWorld', '-Xbootclasspath/p:' + rtjar]
+    args = ['-XX:+CompileTheWorld', f'-Xbootclasspath/p:{rtjar}']
     if vm == 'jvmci':
         args += ['-XX:+BootstrapGraal']
     if mode >= CTWMode.NoInline:
@@ -364,11 +417,10 @@ class Test:
         for valueMap in valueMaps:
             for key, value in valueMap.items():
                 if record.has_key(key) and record[key] != value:
-                    mx.abort('Inconsistant values returned by test machers : ' + str(valueMaps))
+                    mx.abort(f'Inconsistant values returned by test machers : {str(valueMaps)}')
                 record[key] = value
 
-        jvmErrorFile = record.get('jvmError')
-        if jvmErrorFile:
+        if jvmErrorFile := record.get('jvmError'):
             mx.log('/!\\JVM Error : dumping error log...')
             with open(jvmErrorFile, 'rb') as fp:
                 mx.log(fp.read())
@@ -405,13 +457,21 @@ class Test:
                 parser.addMatcher(ValuesMatcher(ibps, {'group' : 'InlinedBytecodesPerSecond', 'name' : self.name, 'score' : '<rate>'}))
             else:
                 ibps = re.compile(r"(?P<compiler>[\w]+) compilation speed: +(?P<rate>[0-9]+) bytes/s {standard")
-                parser.addMatcher(ValuesMatcher(ibps, {'group' : 'InlinedBytecodesPerSecond', 'name' : '<compiler>:' + self.name, 'score' : '<rate>'}))
+                parser.addMatcher(
+                    ValuesMatcher(
+                        ibps,
+                        {
+                            'group': 'InlinedBytecodesPerSecond',
+                            'name': f'<compiler>:{self.name}',
+                            'score': '<rate>',
+                        },
+                    )
+                )
 
-        startDelim = 'START: ' + self.name
-        endDelim = 'END: ' + self.name
+        startDelim = f'START: {self.name}'
+        endDelim = f'END: {self.name}'
 
-        outputfile = os.environ.get('BENCH_OUTPUT', None)
-        if outputfile:
+        if outputfile := os.environ.get('BENCH_OUTPUT', None):
             # Used only to debug output parsing
             with open(outputfile) as fp:
                 output = fp.read()
@@ -439,8 +499,7 @@ class Test:
                 mx.abort("Benchmark failed")
             if valueMap.get('passed') == '1':
                 passed = True
-            groupName = valueMap.get('group')
-            if groupName:
+            if groupName := valueMap.get('group'):
                 group = groups.setdefault(groupName, {})
                 name = valueMap.get('name')
                 score = valueMap.get('score')
